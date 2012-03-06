@@ -1,3 +1,8 @@
+/*
+ * LibBER - Small BER transcoding library.
+ * 
+ * (C) Copyright 2012 - J.W. Janssen <j.w.janssen@lxtreme.nl>
+ */
 package nl.lxtreme.asn;
 
 
@@ -57,7 +62,7 @@ public class AsnSequenceTest
     }
 
     final byte[] bytes = "Smith".getBytes();
-    
+
     seq = builder.addString( bytes ).addBoolean( true ).toSequence();
     int i = 0;
     for ( AsnSequenceType seqType : seq )

@@ -16,19 +16,19 @@ public enum AsnType
 {
   // CONSTANTS
 
-  /** End-of-content */
+  /** End-of-content. */
   EOC,
-  /** A boolean type. */
+  /** A boolean type (supported). */
   BOOLEAN,
-  /** A integer type. */
+  /** A integer type (supported). */
   INTEGER,
-  /** A bitstring (series of zeros and ones). */
+  /** A bitstring (series of zeros and ones, supported). */
   BIT_STRING,
-  /** A simple/octet string (8-bit values). */
+  /** A simple/octet string (8-bit values, supported). */
   OCTET_STRING,
-  /** A null-value. */
+  /** A null-value (supported). */
   NULL,
-  /** A sequence of integer components that identify an object. */
+  /** A sequence of integer components that identify an object (supported). */
   OBJECT_ID,
   /** */
   OBJECT_DESCRIPTOR,
@@ -36,33 +36,36 @@ public enum AsnType
   EXTERNAL,
   /** A real/floating point number. */
   REAL,
-  /** */
+  /** Denotes an enumerated value (supported). */
   ENUMERATED,
   /** */
   EMBEDDED_PDV,
-  /** UTF-8 encoded string */
+  /** UTF-8 encoded string (supported). */
   UTF8_STRING,
-  /** */
+  /**
+   * A sequence of integer components that relatively identify an object
+   * (supported).
+   */
   RELATIVE_OID,
   /** Do not use. */
   RESERVED1,
   /** Do not use. */
   RESERVED2,
-  /** An ordered collection of one or more types. */
+  /** An ordered collection of one or more types (supported). */
   SEQUENCE,
-  /** An unordered collections of one or more types. */
+  /** An unordered collections of one or more types (supported). */
   SET,
   /** */
   NUMERIC_STRING,
-  /** */
+  /** Denotes a string with a limited set of characters (supported). */
   PRINTABLE_STRING,
-  /** */
+  /** Denotes a string with TELETEXT encoding. */
   T61_STRING,
-  /** */
+  /** Denotes a string with VIDEOTEXT encoding. */
   VIDEOTEX_STRING,
-  /** ASCII encoded string. */
+  /** ASCII encoded string (supported). */
   IA5_STRING,
-  /** Timestamp, UTC time. */
+  /** Timestamp, UTC time (supported). */
   UTC_TIME,
   /** */
   GENERALIZED_TIME,
@@ -87,18 +90,18 @@ public enum AsnType
    * @param aValue
    * @return
    */
-  public static int determineLength( Object aValue )
+  public static int determineLength( final Object aValue )
   {
     if ( aValue == null )
     {
       return 0;
     }
-    
+
     if ( aValue.getClass().isArray() )
     {
       return Array.getLength( aValue );
     }
-    
+
     if ( ( Boolean.class == aValue.getClass() ) || ( Boolean.TYPE == aValue.getClass() ) )
     {
       return AsnType.BOOLEAN.getLength( aValue );
@@ -117,7 +120,7 @@ public enum AsnType
    * @return a {@link AsnType} corresponding to the given value, or
    *         <code>null</code> if no such type was found.
    */
-  public static AsnType valueOf( int aValue )
+  public static AsnType valueOf( final int aValue )
   {
     // Take only the lower 5 bits into account...
     final int value = ( aValue & LONG_FORM_TYPE.ordinal() );
@@ -139,7 +142,7 @@ public enum AsnType
    *          which case this method returns 0.
    * @return a length, >= 0.
    */
-  public int getLength( Object aValue )
+  public int getLength( final Object aValue )
   {
     if ( aValue == null )
     {

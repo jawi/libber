@@ -14,7 +14,7 @@ public class AsnIdentifier
   // CONSTANTS
 
   /** Distinguishes between primitive and constructed types. */
-  private int CONSTRUCTED = 0x20;
+  private final int CONSTRUCTED = 0x20;
 
   // VARIABLES
 
@@ -32,7 +32,7 @@ public class AsnIdentifier
    * @param aType
    *          the {@link AsnType} of this identifier.
    */
-  public AsnIdentifier( AsnClass aClass, AsnType aType )
+  public AsnIdentifier( final AsnClass aClass, final AsnType aType )
   {
     this( aClass, false /* aConstructed */, aType );
   }
@@ -48,7 +48,7 @@ public class AsnIdentifier
    * @param aType
    *          the {@link AsnType} of this identifier.
    */
-  public AsnIdentifier( AsnClass aClass, boolean aConstructed, AsnType aType )
+  public AsnIdentifier( final AsnClass aClass, final boolean aConstructed, final AsnType aType )
   {
     if ( aClass == null )
     {
@@ -69,7 +69,7 @@ public class AsnIdentifier
    * @param aType
    *          the {@link AsnType} of this identifier.
    */
-  public AsnIdentifier( AsnType aType )
+  public AsnIdentifier( final AsnType aType )
   {
     this( AsnClass.UNIVERSAL, false /* aConstructed */, aType );
   }
@@ -92,16 +92,50 @@ public class AsnIdentifier
     this.type = _type;
 
     AsnClass _class = AsnClass.valueOf( aOctet );
-    if ( _class != AsnClass.UNIVERSAL && _class != AsnClass.CONTEXT_SPECIFIC )
+    if ( ( _class != AsnClass.UNIVERSAL ) && ( _class != AsnClass.CONTEXT_SPECIFIC ) )
     {
       throw new IllegalArgumentException( "Non-UNIVERSAL class found: " + _class );
     }
     this.clazz = _class;
 
-    this.constructed = ( aOctet & CONSTRUCTED ) != 0;
+    this.constructed = ( aOctet & this.CONSTRUCTED ) != 0;
   }
 
   // METHODS
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public boolean equals( final Object aObject )
+  {
+    if ( this == aObject )
+    {
+      return true;
+    }
+    if ( ( aObject == null ) || !( aObject instanceof AsnIdentifier ) )
+    {
+      return false;
+    }
+
+    final AsnIdentifier other = ( AsnIdentifier )aObject;
+    if ( this.clazz != other.clazz )
+    {
+      return false;
+    }
+
+    if ( this.constructed != other.constructed )
+    {
+      return false;
+    }
+
+    if ( this.type != other.type )
+    {
+      return false;
+    }
+
+    return true;
+  }
 
   /**
    * @return
@@ -119,7 +153,7 @@ public class AsnIdentifier
    *          which case this method returns 0.
    * @return a length, >= 0.
    */
-  public int getLength( Object aValue )
+  public int getLength( final Object aValue )
   {
     if ( !AsnClass.UNIVERSAL.equals( this.clazz ) )
     {
@@ -135,7 +169,7 @@ public class AsnIdentifier
    */
   public int getTag()
   {
-    return this.clazz.getMask() | ( this.constructed ? CONSTRUCTED : 0 ) | this.type.ordinal();
+    return this.clazz.getMask() | ( this.constructed ? this.CONSTRUCTED : 0 ) | this.type.ordinal();
   }
 
   /**
@@ -147,10 +181,33 @@ public class AsnIdentifier
   }
 
   /**
+   * {@inheritDoc}
+   */
+  @Override
+  public int hashCode()
+  {
+    final int prime = 31;
+    int result = 1;
+    result = ( prime * result ) + ( ( this.clazz == null ) ? 0 : this.clazz.hashCode() );
+    result = ( prime * result ) + ( this.constructed ? 1231 : 1237 );
+    result = ( prime * result ) + ( ( this.type == null ) ? 0 : this.type.hashCode() );
+    return result;
+  }
+
+  /**
    * @return
    */
   public boolean isConstructed()
   {
     return this.constructed;
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public String toString()
+  {
+    return getType() + "[constructed: " + isConstructed() + ", class = " + getClazz() + "]";
   }
 }

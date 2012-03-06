@@ -9,21 +9,19 @@ package nl.lxtreme.asn.ber;
 import static nl.lxtreme.asn.AsnType.*;
 
 import java.io.*;
+import java.math.*;
+import java.util.*;
 
 import nl.lxtreme.asn.*;
-import nl.lxtreme.asn.AsnSequence.*;
+import nl.lxtreme.asn.AsnSequence.AsnSequenceType;
 
 
 /**
  * Provides a {@link OutputStream} for writing BER-encoded values in a
  * stream-like fashion.
  */
-public class BerOutputStream extends OutputStream
+public class BerOutputStream extends FilterOutputStream
 {
-  // VARIABLES
-
-  private final OutputStream out;
-
   // CONSTRUCTORS
 
   /**
@@ -35,27 +33,33 @@ public class BerOutputStream extends OutputStream
    */
   public BerOutputStream( final OutputStream aOutStream )
   {
-    this.out = aOutStream;
+    super( aOutStream );
   }
 
   // METHODS
 
   /**
-   * {@inheritDoc}
+   * Writes a primitive bit string value.
+   * 
+   * @param aBitString
+   *          the bit string value to write.
+   * @throws IOException
+   *           in case of I/O problems.
    */
-  @Override
-  public void close() throws IOException
+  public void writeBitString( final BigInteger aBitString ) throws IOException
   {
-    this.out.close();
-  }
+    int bitLength = aBitString.bitLength();
+    final int stuffBits = ( int )( ( Math.ceil( bitLength / 8.0 ) * 8.0 ) - bitLength );
 
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  public void flush() throws IOException
-  {
-    this.out.flush();
+    final byte[] bytes = aBitString.shiftLeft( stuffBits ).toByteArray();
+    final int[] values = new int[bytes.length + 1];
+    values[0] = stuffBits;
+    for ( int i = 0; i < bytes.length; i++ )
+    {
+      values[i + 1] = ( bytes[i] & 0xFF );
+    }
+
+    writeTLV( BIT_STRING, values.length, values );
   }
 
   /**
@@ -66,9 +70,68 @@ public class BerOutputStream extends OutputStream
    * @throws IOException
    *           in case of I/O problems.
    */
-  public void writeBoolean( boolean aValue ) throws IOException
+  public void writeBoolean( final boolean aValue ) throws IOException
   {
     writeTLV( BOOLEAN, 0x01, aValue ? 0xFF : 0x00 );
+  }
+
+  /**
+   * Writes a primitive integer value.
+   * 
+   * @param aValue
+   *          the integer value to write.
+   * @throws IOException
+   *           in case of I/O problems.
+   */
+  public void writeEnumeratedValue( final int aValue ) throws IOException
+  {
+    int intsize = INTEGER.getLength( aValue );
+
+    final int mask = 0xff800000;
+    int value = ( aValue << ( ( 4 - intsize ) * 8 ) );
+
+    writeTLV( ENUMERATED, intsize );
+    while ( intsize-- > 0 )
+    {
+      write( ( byte )( ( value & mask ) >> 24 ) );
+      value <<= 8;
+    }
+  }
+
+  /**
+   * Writes an IA5 (ASCII) encoded string value.
+   * 
+   * @param aString
+   *          the IA5 (ASCII) string value to write.
+   * @throws IOException
+   *           in case of I/O problems.
+   */
+  public void writeIA5String( final String aString ) throws IOException
+  {
+    byte[] bytes = aString.getBytes( "ASCII" );
+    writeTLV( IA5_STRING, bytes.length );
+    for ( byte b : bytes )
+    {
+      write( b );
+    }
+  }
+
+  /**
+   * Writes a primitive integer value.
+   * 
+   * @param aValue
+   *          the integer value to write.
+   * @throws IOException
+   *           in case of I/O problems.
+   */
+  public void writeInt( final int aValue ) throws IOException
+  {
+    byte[] content = encodeInteger( aValue );
+    writeTLV( INTEGER, content.length );
+    for ( byte b : content )
+    {
+      write( b );
+    }
   }
 
   /**
@@ -83,26 +146,52 @@ public class BerOutputStream extends OutputStream
   }
 
   /**
-   * Writes a primitive integer value.
+   * Writes a object identifier.
    * 
-   * @param aValue
-   *          the integer value to write.
+   * @param aSubIDs
+   *          the integer parts of the object identifier, cannot be
+   *          <code>null</code>.
    * @throws IOException
    *           in case of I/O problems.
    */
-  public void writeInt( int aValue ) throws IOException
+  public void writeObjectIdentifier( final int[] aSubIDs ) throws IOException
   {
-    int intsize = INTEGER.getLength( aValue );
-
-    final int mask = 0xff800000;
-    int value = ( aValue << ( ( 4 - intsize ) * 8 ) );
-
-    writeTLV( INTEGER, intsize );
-    while ( intsize-- > 0 )
+    int[] content = new int[aSubIDs.length * 4];
+    int offset = 0;
+    for ( int i = 0; i < aSubIDs.length; i++ )
     {
-      write( ( byte )( ( value & mask ) >> 24 ) );
-      value <<= 8;
+      final int value;
+      if ( i == 0 )
+      {
+        // First sub identifier is packed...
+        value = ( aSubIDs[i] * 40 ) + aSubIDs[++i];
+      }
+      else
+      {
+        value = aSubIDs[i];
+      }
+
+      final int size = INTEGER.getLength( value );
+      int j = size;
+      while ( j > 0 )
+      {
+        int s = ( size - j );
+        int v = ( ( value >> ( 7 * s ) ) & 0xFF );
+        if ( v >= 0x80 )
+        {
+          v &= 0x7f;
+        }
+        if ( j < size )
+        {
+          v |= 0x80;
+        }
+        content[offset + --j] = v;
+      }
+
+      offset += size;
     }
+
+    writeTLV( OBJECT_ID, offset, Arrays.copyOf( content, offset ) );
   }
 
   /**
@@ -113,12 +202,67 @@ public class BerOutputStream extends OutputStream
    * @throws IOException
    *           in case of I/O problems.
    */
-  public void writeOctetString( byte[] aString ) throws IOException
+  public void writeOctetString( final byte[] aString ) throws IOException
   {
     writeTLV( OCTET_STRING, aString.length );
     for ( byte b : aString )
     {
       write( b );
+    }
+  }
+
+  /**
+   * Writes a object identifier.
+   * 
+   * @param aSubIDs
+   *          the integer parts of the object identifier, cannot be
+   *          <code>null</code>.
+   * @throws IOException
+   *           in case of I/O problems.
+   */
+  public void writeRelativeObjectIdentifier( final int[] aSubIDs ) throws IOException
+  {
+    int[] content = new int[aSubIDs.length * 4];
+    int offset = 0;
+    for ( final int value : aSubIDs )
+    {
+      final int size = INTEGER.getLength( value );
+      int j = size;
+      while ( j > 0 )
+      {
+        int s = ( size - j );
+        int v = ( ( value >> ( 7 * s ) ) & 0xFF );
+        if ( v >= 0x80 )
+        {
+          v &= 0x7f;
+        }
+        if ( j < size )
+        {
+          v |= 0x80;
+        }
+        content[offset + --j] = v;
+      }
+
+      offset += size;
+    }
+
+    writeTLV( RELATIVE_OID, offset, Arrays.copyOf( content, offset ) );
+  }
+
+  /**
+   * Writes a ASN.1 sequence.
+   * 
+   * @param aSequence
+   *          the sequence to write, cannot be <code>null</code>.
+   * @throws IOException
+   *           in case of I/O problems.
+   */
+  public void writeSequence( final AsnSequence aSequence ) throws IOException
+  {
+    writeTLV( aSequence.getMainType(), aSequence.getLength(), null );
+    for ( AsnSequenceType seqType : aSequence )
+    {
+      writeTLV( seqType.getType(), seqType.getLength(), seqType.getValue() );
     }
   }
 
@@ -130,7 +274,7 @@ public class BerOutputStream extends OutputStream
    * @throws IOException
    *           in case of I/O problems.
    */
-  public void writeString( String aString ) throws IOException
+  public void writeString( final String aString ) throws IOException
   {
     writeOctetString( aString.getBytes( "8859_1" ) );
   }
@@ -143,35 +287,57 @@ public class BerOutputStream extends OutputStream
    * @throws IOException
    *           in case of I/O problems.
    */
-  public void writeUTF8String( String aString ) throws IOException
+  public void writeUTF8String( final String aString ) throws IOException
   {
     writeOctetString( aString.getBytes( "UTF8" ) );
   }
 
-  /**
-   * Writes a ASN.1 sequence.
-   * 
-   * @param aSequence
-   *          the sequence to write, cannot be <code>null</code>.
-   * @throws IOException
-   *           in case of I/O problems.
-   */
-  public void writeSequence( AsnSequence aSequence ) throws IOException
+  private byte[] encodeInteger( final int aValue )
   {
-    writeTLV( aSequence.getMainType(), aSequence.getLength(), null );
-    for ( AsnSequenceType seqType : aSequence )
+    int intsize = INTEGER.getLength( aValue );
+
+    final int mask = 0xff800000;
+    int value = ( aValue << ( ( 4 - intsize ) * 8 ) );
+
+    byte[] result = new byte[intsize];
+    int i = 0;
+    while ( intsize-- > 0 )
     {
-      writeTLV( seqType.getType(), seqType.getLength(), seqType.getValue() );
+      result[i++] = ( byte )( ( value & mask ) >> 24 );
+      value <<= 8;
     }
+
+    return result;
   }
 
   /**
-   * {@inheritDoc}
+   * @param aLength
+   * @throws IOException
    */
-  @Override
-  public void write( int aValue ) throws IOException
+  private void writeLength( final int aLength ) throws IOException
   {
-    this.out.write( aValue );
+    if ( aLength < 128 )
+    {
+      write( ( byte )aLength );
+    }
+    else if ( aLength <= 0xff )
+    {
+      write( ( byte )0x81 );
+      write( ( byte )aLength );
+    }
+    else if ( aLength <= 0xffff )
+    {
+      write( ( byte )0x82 );
+      write( ( byte )( aLength >> 8 ) );
+      write( ( byte )( aLength & 0xff ) );
+    }
+    else if ( aLength <= 0xffffff )
+    {
+      write( ( byte )0x83 );
+      write( ( byte )( aLength >> 16 ) );
+      write( ( byte )( aLength >> 8 ) );
+      write( ( byte )( aLength & 0xff ) );
+    }
   }
 
   /**
@@ -180,23 +346,7 @@ public class BerOutputStream extends OutputStream
    * @param aContent
    * @throws IOException
    */
-  private void writeTLV( AsnType aType, int aLength, int... aContent ) throws IOException
-  {
-    write( ( byte )aType.ordinal() );
-    writeLength( aLength );
-    for ( int c : aContent )
-    {
-      write( ( byte )c );
-    }
-  }
-
-  /**
-   * @param aType
-   * @param aLength
-   * @param aContent
-   * @throws IOException
-   */
-  private void writeTLV( AsnIdentifier aIdentifier, int aLength, Object aContent ) throws IOException
+  private void writeTLV( final AsnIdentifier aIdentifier, final int aLength, final Object aContent ) throws IOException
   {
     if ( aContent != null )
     {
@@ -226,32 +376,18 @@ public class BerOutputStream extends OutputStream
   }
 
   /**
+   * @param aType
    * @param aLength
+   * @param aContent
    * @throws IOException
    */
-  private void writeLength( int aLength ) throws IOException
+  private void writeTLV( final AsnType aType, final int aLength, final int... aContent ) throws IOException
   {
-    if ( aLength < 128 )
+    write( ( byte )aType.ordinal() );
+    writeLength( aLength );
+    for ( int c : aContent )
     {
-      write( ( byte )aLength );
-    }
-    else if ( aLength <= 0xff )
-    {
-      write( ( byte )0x81 );
-      write( ( byte )aLength );
-    }
-    else if ( aLength <= 0xffff )
-    {
-      write( ( byte )0x82 );
-      write( ( byte )( aLength >> 8 ) );
-      write( ( byte )( aLength & 0xff ) );
-    }
-    else if ( aLength <= 0xffffff )
-    {
-      write( ( byte )0x83 );
-      write( ( byte )( aLength >> 16 ) );
-      write( ( byte )( aLength >> 8 ) );
-      write( ( byte )( aLength & 0xff ) );
+      write( ( byte )c );
     }
   }
 }
