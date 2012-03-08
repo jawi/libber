@@ -7,9 +7,9 @@ package nl.lxtreme.asn;
 
 
 /**
- * Represents a ASN.1 type identifier.
+ * Represents a ASN.1 type identifier octet.
  */
-public class AsnIdentifier
+public final class AsnIdentifier
 {
   // CONSTANTS
 
@@ -84,20 +84,18 @@ public class AsnIdentifier
    */
   public AsnIdentifier( final int aOctet )
   {
-    AsnType _type = AsnType.valueOf( aOctet );
-    if ( _type == AsnType.LONG_FORM_TYPE )
+    if ( ( aOctet < 0 ) || ( aOctet > 0xFF ) )
+    {
+      throw new IllegalArgumentException( "Invalid octet value!" );
+    }
+
+    this.type = AsnType.valueOf( aOctet );
+    if ( this.type == AsnType.LONG_FORM_TYPE )
     {
       throw new IllegalArgumentException( "Long form tag found!" );
     }
-    this.type = _type;
 
-    AsnClass _class = AsnClass.valueOf( aOctet );
-    if ( ( _class != AsnClass.UNIVERSAL ) && ( _class != AsnClass.CONTEXT_SPECIFIC ) )
-    {
-      throw new IllegalArgumentException( "Non-UNIVERSAL class found: " + _class );
-    }
-    this.clazz = _class;
-
+    this.clazz = AsnClass.valueOf( aOctet );
     this.constructed = ( aOctet & this.CONSTRUCTED ) != 0;
   }
 
@@ -138,7 +136,9 @@ public class AsnIdentifier
   }
 
   /**
-   * @return
+   * Returns the {@link AsnClass} for this identifier.
+   * 
+   * @return a {@link AsnClass}, never <code>null</code>.
    */
   public AsnClass getClazz()
   {
@@ -146,26 +146,9 @@ public class AsnIdentifier
   }
 
   /**
-   * Calculates the length of this identifier, based on the given value.
+   * Returns an octet value for this identifier.
    * 
-   * @param aValue
-   *          the value to calculate the length for, can be <code>null</code> in
-   *          which case this method returns 0.
-   * @return a length, >= 0.
-   */
-  public int getLength( final Object aValue )
-  {
-    if ( !AsnClass.UNIVERSAL.equals( this.clazz ) )
-    {
-      throw new IllegalArgumentException( "Unable to determine length for non-UNIVERSAL identifiers!" );
-    }
-    return this.type.getLength( aValue );
-  }
-
-  /**
-   * Returns a 8-bit tag value for this identifier.
-   * 
-   * @return a tag value for this identifier, >= 0.
+   * @return an octet value for this identifier, >= 0 && <= 0xFF.
    */
   public int getTag()
   {
@@ -173,7 +156,9 @@ public class AsnIdentifier
   }
 
   /**
-   * @return
+   * Returns the {@link AsnType} of this identifier.
+   * 
+   * @return a {@link AsnType}, never <code>null</code>.
    */
   public AsnType getType()
   {
@@ -195,7 +180,11 @@ public class AsnIdentifier
   }
 
   /**
-   * @return
+   * Returns whether this identifier represents a <em>primitive</em> or a
+   * <em>constructed</em> type.
+   * 
+   * @return <code>true</code> if this identifier is a constructed type,
+   *         <code>false</code> if it is a primitive type.
    */
   public boolean isConstructed()
   {

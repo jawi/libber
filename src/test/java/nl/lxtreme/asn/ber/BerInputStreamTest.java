@@ -32,6 +32,11 @@ public class BerInputStreamTest
 
   // METHODS
 
+  private static void assertCalendarEquals( final Calendar aCal1, final Calendar aCal2 )
+  {
+    assertEquals( aCal1.getTime(), aCal2.getTime() );
+  }
+
   /**
    * Test case for {@link BerInputStream#readSequenceAsStream()}.
    */
@@ -98,6 +103,78 @@ public class BerInputStreamTest
 
     prepareContent( BOOLEAN, 0x81, 0x01, 0xFF );
     assertTrue( this.bis.readBoolean() );
+  }
+
+  /**
+   * Test case for {@link BerInputStream#readSequenceAsStream()}.
+   */
+  @Test
+  public void testReadConsecutiveSequenceStreams() throws IOException
+  {
+    prepareContent( SEQUENCE.ordinal() | CONSTRUCTED, 0x0D, //
+        BOOLEAN.ordinal(), 0x01, 0xFF, //
+        INTEGER.ordinal(), 0x02, 0x12, 0x34, //
+        OCTET_STRING.ordinal(), 0x04, '1', '2', '3', '4', //
+        SEQUENCE.ordinal() | CONSTRUCTED, 0x0C, //
+        BOOLEAN.ordinal(), 0x01, 0x00, //
+        INTEGER.ordinal(), 0x02, 0x56, 0x78, //
+        OCTET_STRING.ordinal(), 0x03, '3', '2', '1' );
+
+    BerInputStream seqIS = this.bis.readSequenceAsStream();
+
+    assertNotNull( seqIS );
+    assertEquals( true, seqIS.readBoolean() );
+    assertEquals( Integer.valueOf( 0x1234 ), seqIS.readInt() );
+    assertEquals( "1234", seqIS.readString() );
+    assertEquals( -1, seqIS.read() );
+
+    seqIS = this.bis.readSequenceAsStream();
+
+    assertNotNull( seqIS );
+    assertEquals( false, seqIS.readBoolean() );
+    assertEquals( Integer.valueOf( 0x5678 ), seqIS.readInt() );
+    assertEquals( "321", seqIS.readString() );
+    assertEquals( -1, seqIS.read() );
+  }
+
+  /**
+   * Test case for {@link BerInputStream#readGeneralizedTime()}.
+   */
+  @Test
+  public void testReadGeneralizedTime() throws IOException
+  {
+    Calendar cal = Calendar.getInstance( TimeZone.getTimeZone( "PST" ) );
+    cal.set( 1991, Calendar.MAY, 6, 16, 45, 40 );
+    cal.set( Calendar.MILLISECOND, 0 );
+
+    prepareContent( GENERALIZED_TIME, "19910506164540-0700" );
+    assertCalendarEquals( cal, this.bis.readGeneralizedTime() );
+
+    cal.setTimeZone( TimeZone.getTimeZone( "UTC" ) );
+    cal.set( Calendar.MILLISECOND, 1 );
+
+    prepareContent( GENERALIZED_TIME, "19910506184540.1Z" );
+    assertCalendarEquals( cal, this.bis.readGeneralizedTime() );
+
+    cal.set( Calendar.MILLISECOND, 12 );
+
+    prepareContent( GENERALIZED_TIME, "19910506184540.12Z" );
+    assertCalendarEquals( cal, this.bis.readGeneralizedTime() );
+
+    cal.set( Calendar.MILLISECOND, 123 );
+
+    prepareContent( GENERALIZED_TIME, "19910506184540.123Z" );
+    assertCalendarEquals( cal, this.bis.readGeneralizedTime() );
+
+    cal = Calendar.getInstance( TimeZone.getTimeZone( "UTC" ) );
+    cal.set( 1994, Calendar.DECEMBER, 16, 10, 32, 00 );
+    cal.set( Calendar.MILLISECOND, 0 );
+
+    prepareContent( GENERALIZED_TIME, "199412160532-0500" );
+    assertCalendarEquals( cal, this.bis.readGeneralizedTime() );
+
+    prepareContent( GENERALIZED_TIME, "199412161132Z" );
+    assertCalendarEquals( cal, this.bis.readGeneralizedTime() );
   }
 
   /**
@@ -213,31 +290,31 @@ public class BerInputStreamTest
    * Test case for {@link BerInputStream#readSequenceAsStream()}.
    */
   @Test
-  public void testReadMultipleSequenceStreams() throws IOException
+  public void testReadNestedSequenceStreams() throws IOException
   {
-    prepareContent( SEQUENCE.ordinal() | CONSTRUCTED, 0x0D, //
+    prepareContent( SEQUENCE.ordinal() | 0x20, 0x1C, //
         BOOLEAN.ordinal(), 0x01, 0xFF, //
         INTEGER.ordinal(), 0x02, 0x12, 0x34, //
-        OCTET_STRING.ordinal(), 0x04, '1', '2', '3', '4', //
-        SEQUENCE.ordinal() | CONSTRUCTED, 0x0C, //
+        SEQUENCE.ordinal() | 0x20, 0x0D, //
+        OCTET_STRING.ordinal(), 0x04, '4', '5', '6', '7', //
+        INTEGER.ordinal(), 0x02, 0x18, 0x92, //
         BOOLEAN.ordinal(), 0x01, 0x00, //
-        INTEGER.ordinal(), 0x02, 0x56, 0x78, //
-        OCTET_STRING.ordinal(), 0x03, '3', '2', '1' );
+        OCTET_STRING.ordinal(), 0x04, '1', '2', '3', '4' //
+    );
 
     BerInputStream seqIS = this.bis.readSequenceAsStream();
 
-    assertNotNull( seqIS );
     assertEquals( true, seqIS.readBoolean() );
     assertEquals( Integer.valueOf( 0x1234 ), seqIS.readInt() );
+
+    BerInputStream nestedSeqIS = this.bis.readSequenceAsStream();
+
+    assertEquals( "4567", nestedSeqIS.readString() );
+    assertEquals( Integer.valueOf( 0x1892 ), nestedSeqIS.readInt() );
+    assertEquals( false, nestedSeqIS.readBoolean() );
+    assertEquals( -1, nestedSeqIS.read() );
+
     assertEquals( "1234", seqIS.readString() );
-    assertEquals( -1, seqIS.read() );
-
-    seqIS = this.bis.readSequenceAsStream();
-
-    assertNotNull( seqIS );
-    assertEquals( false, seqIS.readBoolean() );
-    assertEquals( Integer.valueOf( 0x5678 ), seqIS.readInt() );
-    assertEquals( "321", seqIS.readString() );
     assertEquals( -1, seqIS.read() );
   }
 
@@ -415,28 +492,24 @@ public class BerInputStreamTest
 
     // YYMMDDhhmmssZ
     prepareContent( UTC_TIME, "910506234540Z" );
-    assertEquals( cal.getTime(), this.bis.readUtcTime() );
-
-    // YYMMDDhhmmss-hh'mm'
-    prepareContent( UTC_TIME, "910506164540-0700" );
-    assertEquals( cal.getTime(), this.bis.readUtcTime() );
+    assertCalendarEquals( cal, this.bis.readUtcTime() );
 
     cal.set( Calendar.SECOND, 0 );
 
     // YYMMDDhhmmZ
     prepareContent( UTC_TIME, "9105062345Z" );
-    assertEquals( cal.getTime(), this.bis.readUtcTime() );
+    assertCalendarEquals( cal, this.bis.readUtcTime() );
 
-    // YYMMDDhhmmss-hh'mm'
-    prepareContent( UTC_TIME, "9105061645-0700" );
-    assertEquals( cal.getTime(), this.bis.readUtcTime() );
+    // YYMMDDhhmm-hh'mm'
+    prepareContent( UTC_TIME, "910506164500-0700" );
+    assertCalendarEquals( cal, this.bis.readUtcTime() );
 
     cal = Calendar.getInstance( TimeZone.getTimeZone( "UTC" ) );
     cal.set( 2008, Calendar.OCTOBER, 15, 15, 03, 41 );
     cal.set( Calendar.MILLISECOND, 0 );
 
     prepareContent( UTC_TIME, 0x0D, 0x30, 0x38, 0x31, 0x30, 0x31, 0x35, 0x31, 0x35, 0x30, 0x33, 0x34, 0x31, 0x5A );
-    assertEquals( cal.getTime(), this.bis.readUtcTime() );
+    assertCalendarEquals( cal, this.bis.readUtcTime() );
   }
 
   /**

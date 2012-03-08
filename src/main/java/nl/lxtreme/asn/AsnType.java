@@ -6,9 +6,6 @@
 package nl.lxtreme.asn;
 
 
-import java.lang.reflect.*;
-
-
 /**
  * Denotes the various native types of ASN.1 (UNIVERSAL class).
  */
@@ -67,7 +64,7 @@ public enum AsnType
   IA5_STRING,
   /** Timestamp, UTC time (supported). */
   UTC_TIME,
-  /** */
+  /** Generalized time (supported). */
   GENERALIZED_TIME,
   /** */
   GRAPHIC_STRING,
@@ -88,34 +85,6 @@ public enum AsnType
 
   /**
    * @param aValue
-   * @return
-   */
-  public static int determineLength( final Object aValue )
-  {
-    if ( aValue == null )
-    {
-      return 0;
-    }
-
-    if ( aValue.getClass().isArray() )
-    {
-      return Array.getLength( aValue );
-    }
-
-    if ( ( Boolean.class == aValue.getClass() ) || ( Boolean.TYPE == aValue.getClass() ) )
-    {
-      return AsnType.BOOLEAN.getLength( aValue );
-    }
-    if ( ( Integer.class == aValue.getClass() ) || ( Integer.TYPE == aValue.getClass() ) )
-    {
-      return AsnType.INTEGER.getLength( aValue );
-    }
-
-    throw new RuntimeException( "Unable to determine length for context-specific value: " + aValue.getClass() );
-  }
-
-  /**
-   * @param aValue
    *          the ASN.1 tag-value of the type to return.
    * @return a {@link AsnType} corresponding to the given value, or
    *         <code>null</code> if no such type was found.
@@ -133,45 +102,4 @@ public enum AsnType
     }
     return null;
   }
-
-  /**
-   * Calculates the length of this identifier, based on the given value.
-   * 
-   * @param aValue
-   *          the value to calculate the length for, can be <code>null</code> in
-   *          which case this method returns 0.
-   * @return a length, >= 0.
-   */
-  public int getLength( final Object aValue )
-  {
-    if ( aValue == null )
-    {
-      return 0;
-    }
-
-    switch ( this )
-    {
-      case BOOLEAN:
-        return 1;
-
-      case INTEGER:
-        final int mask = 0xff800000;
-        int intsize = 4;
-        int value = ( ( Integer )aValue ).intValue();
-
-        while ( ( ( ( value & mask ) == 0 ) || ( ( value & mask ) == mask ) ) && ( intsize > 1 ) )
-        {
-          intsize--;
-          value <<= 8;
-        }
-        return intsize;
-
-      case OCTET_STRING:
-        return ( ( byte[] )aValue ).length;
-
-      default:
-        throw new UnsupportedOperationException( "Unsupported type for length: " + this );
-    }
-  }
-
 }

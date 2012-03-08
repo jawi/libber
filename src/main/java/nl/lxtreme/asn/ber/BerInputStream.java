@@ -248,6 +248,29 @@ public class BerInputStream extends FilterInputStream
   }
 
   /**
+   * Reads a ASN.1 string representation of a generalized timestamp from the
+   * input stream and returns its value.
+   * <p>
+   * Only the following time representations is supported:
+   * <code>YYMMDDhhmmss.SSS'Z'</code>.
+   * </p>
+   * 
+   * @return a UTC date value, can only be <code>null</code> if end-of-stream is
+   *         reached.
+   * @throws IOException
+   *           in case of I/O errors.
+   */
+  public Calendar readGeneralizedTime() throws IOException
+  {
+    final BerValue v = readBerValue( GENERALIZED_TIME );
+    if ( v == null )
+    {
+      return null;
+    }
+    return convertToISO8601Date( v );
+  }
+
+  /**
    * Reads a ASN.1 IA5 (ASCII) encoded string from the input stream and returns
    * its value.
    * 
@@ -541,23 +564,16 @@ public class BerInputStream extends FilterInputStream
    * Reads a ASN.1 string representation of a UTC timestamp from the input
    * stream and returns its value.
    * <p>
-   * The following time representations are supported:
+   * Only the following time representations is supported:
+   * <code>YYMMDDhhmmss'Z'</code>.
    * </p>
-   * <ul>
-   * <li>YYMMDDhhmmZ</li>
-   * <li>YYMMDDhhmm+hh'mm'</li>
-   * <li>YYMMDDhhmm-hh'mm'</li>
-   * <li>YYMMDDhhmmssZ</li>
-   * <li>YYMMDDhhmmss+hh'mm'</li>
-   * <li>YYMMDDhhmmss-hh'mm'</li>
-   * </ul>
    * 
    * @return a UTC date value, can only be <code>null</code> if end-of-stream is
    *         reached.
    * @throws IOException
    *           in case of I/O errors.
    */
-  public Date readUtcTime() throws IOException
+  public Calendar readUtcTime() throws IOException
   {
     final BerValue v = readBerValue( UTC_TIME );
     if ( v == null )
@@ -696,6 +712,55 @@ public class BerInputStream extends FilterInputStream
   }
 
   /**
+   * @param aBerValue
+   * @return
+   * @throws IOException
+   */
+  private Calendar convertToISO8601Date( final BerValue aBerValue ) throws IOException
+  {
+    final String timeStr = convertToString( aBerValue, "ASCII" );
+
+    final StringBuilder format = new StringBuilder( "yyyyMMddHHmm" );
+    // are the seconds given as well (add one to indicate the 'Z')...
+    if ( ( timeStr.length() > ( format.length() + 1 ) ) && Character.isDigit( timeStr.charAt( format.length() ) ) )
+    {
+      format.append( "ss" );
+    }
+    if ( timeStr.contains( "." ) )
+    {
+      format.append( ".SSSS" );
+    }
+    else if ( timeStr.contains( "," ) )
+    {
+      format.append( ",SSSS" );
+    }
+    if ( timeStr.endsWith( "Z" ) )
+    {
+      format.append( "'Z'" );
+    }
+    else
+    {
+      format.append( "Z" );
+    }
+
+    final SimpleDateFormat parser = new SimpleDateFormat( format.toString() );
+
+    final Calendar result = Calendar.getInstance();
+
+    ParsePosition pos = new ParsePosition( 0 );
+    Date timestamp = parser.parse( timeStr, pos );
+
+    if ( ( timestamp == null ) || ( pos.getErrorIndex() >= 0 ) )
+    {
+      throw new IOException( "Invalid UTC timestamp: " + timeStr );
+    }
+
+    result.setTime( timestamp );
+
+    return result;
+  }
+
+  /**
    * Converts the given {@link BerValue} to a string representation.
    * 
    * @param aBerValue
@@ -730,52 +795,53 @@ public class BerInputStream extends FilterInputStream
    * Converts the given {@link BerValue} to a UTC-date representation.
    * 
    * @param aBerValue
-   *          the {@link BerValue} to convert to a date;
-   * @param aEncoding
-   *          the encoding to use for the byte-values in the given
-   *          {@link BerValue}.
+   *          the {@link BerValue} to convert to a date.
    * @return the {@link Date} value, never <code>null</code>.
    * @throws IOException
    *           in case of I/O problems.
    */
-  private Date convertToUTCDate( final BerValue aBerValue ) throws IOException
+  private Calendar convertToUTCDate( final BerValue aBerValue ) throws IOException
   {
     final String timeStr = convertToString( aBerValue, "ASCII" );
-    if ( ( timeStr.length() <= 10 ) || ( timeStr.length() > 17 ) )
-    {
-      throw new IOException( "Invalid UTC timestamp: " + timeStr );
-    }
 
-    // Always consider the short date/time representation...
-    StringBuilder formatStr = new StringBuilder( "yyMMddHHmm" );
+    final TimeZone timeZone = TimeZone.getTimeZone( "UTC" );
 
-    // Check whether the time contains the (optional) seconds...
-    if ( Character.isDigit( timeStr.charAt( 10 ) ) )
+    final StringBuilder format = new StringBuilder( "yyMMddHHmm" );
+    // are the seconds given as well (add one to indicate the 'Z')...
+    if ( timeStr.length() > ( format.length() + 1 ) )
     {
-      formatStr.append( "ss" );
+      format.append( "ss" );
     }
-    // Check whether the 'Z' marker is used to represent GMT+0...
     if ( timeStr.endsWith( "Z" ) )
     {
-      formatStr.append( "'Z'" );
+      format.append( "'Z'" );
     }
     else
     {
-      formatStr.append( "Z" );
+      format.append( "Z" );
     }
 
-    try
-    {
-      final SimpleDateFormat parser = new SimpleDateFormat( formatStr.toString() );
-      // We should expect everything in UTC!
-      parser.setTimeZone( TimeZone.getTimeZone( "UTC" ) );
+    final SimpleDateFormat parser = new SimpleDateFormat( format.toString() );
+    // We should expect everything in UTC!
+    parser.setTimeZone( timeZone );
 
-      return parser.parse( timeStr );
-    }
-    catch ( ParseException exception )
+    final Calendar result = Calendar.getInstance( timeZone );
+
+    ParsePosition pos = new ParsePosition( 0 );
+    Date timestamp = parser.parse( timeStr, pos );
+
+    if ( ( timestamp == null ) || ( pos.getErrorIndex() >= 0 ) )
     {
       throw new IOException( "Invalid UTC timestamp: " + timeStr );
     }
+    if ( pos.getIndex() < timeStr.length() )
+    {
+      throw new IOException( "Invalid UTC timestamp: " + timeStr );
+    }
+
+    result.setTime( timestamp );
+
+    return result;
   }
 
   /**
